@@ -36,22 +36,24 @@ jobs:
         export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
         export TARGET=aarch64-linux-android
         export API=21
-
-        ./configure \
-          --host=$TARGET \
-          --prefix=/tmp/parted-install \
-          CC=$TOOLCHAIN/bin/$TARGET$API-clang \
-          CXX=$TOOLCHAIN/bin/$TARGET$API-clang++ \
-          AR=$TOOLCHAIN/bin/llvm-ar \
-          LD=$TOOLCHAIN/bin/ld \
-          RANLIB=$TOOLCHAIN/bin/llvm-ranlib \
-          STRIP=$TOOLCHAIN/bin/llvm-strip \
-          --enable-static \
-          --disable-shared \
-          --disable-nls \
-          --disable-readline \
-          --disable-device-mapper \
-          --disable-debug
+        
+     ./configure \
+      --host=$TARGET \
+       --prefix=/tmp/parted-install \
+        CC=$TOOLCHAIN/bin/$TARGET$API-clang \
+        CXX=$TOOLCHAIN/bin/$TARGET$API-clang++ \
+        AR=$TOOLCHAIN/bin/llvm-ar \
+         LD=$TOOLCHAIN/bin/ld \
+         RANLIB=$TOOLCHAIN/bin/llvm-ranlib \
+         STRIP=$TOOLCHAIN/bin/llvm-strip \
+         --enable-static \
+        --disable-shared \
+        --disable-nls \
+        --disable-readline \
+        --disable-device-mapper \
+        --disable-debug \
+        --without-uuid  
+        # 关键：禁用 UUID 支持
 
     - name: Compile
       working-directory: parted-3.6
