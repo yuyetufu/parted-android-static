@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (patched no uuid)
+name: Build Static sgdisk for Android arm64 (patched no uuid no ncurses)
 
 on: workflow_dispatch
 
@@ -25,14 +25,16 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Patch guid.cc to remove uuid dependency
+    - name: Patch guid.cc and guid.h to remove uuid dependency
       working-directory: gptfdisk-1.0.10
       run: |
-        sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc
+        sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc guid.h
         sed -i '/uuid_generate/d' guid.cc
         sed -i '/uuid_unparse/d' guid.cc
         sed -i '/uuid_clear/d' guid.cc
-        echo "Patched guid.cc to remove uuid.h dependency"
+        sed -i '/uuid_copy/d' guid.cc
+        sed -i '/uuid_is_null/d' guid.cc
+        echo "Patched guid.cc and guid.h to remove uuid dependency"
 
     - name: Cross-compile static sgdisk for Android arm64
       working-directory: gptfdisk-1.0.10
