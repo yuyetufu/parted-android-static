@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (only sgdisk, no ncurses)
+name: Build Static sgdisk for Android arm64 (only sgdisk)
 
 on: workflow_dispatch
 
@@ -11,7 +11,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y wget build-essential g++ make uuid-dev pkg-config
+        sudo apt install -y wget build-essential g++ make uuid-dev pkg-config libpopt-dev
 
     - name: Download gptfdisk 1.0.10 source
       run: |
