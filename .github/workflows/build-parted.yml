@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (patched no uuid no ncurses)
+name: Build Static sgdisk for Android arm64 (fully patched no uuid no ncurses)
 
 on: workflow_dispatch
 
@@ -25,16 +25,28 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Patch guid.cc and guid.h to remove uuid dependency
+    - name: Patch guid.cc and guid.h to completely remove uuid dependency
       working-directory: gptfdisk-1.0.10
       run: |
+        # 注释 include
         sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc guid.h
+
+        # 删除 uuid_t 定义和相关函数调用
+        sed -i '/typedef uuid_t my_uuid_t/d' guid.h
+        sed -i '/my_uuid_t uuidData/d' guid.cc
         sed -i '/uuid_generate/d' guid.cc
         sed -i '/uuid_unparse/d' guid.cc
         sed -i '/uuid_clear/d' guid.cc
         sed -i '/uuid_copy/d' guid.cc
         sed -i '/uuid_is_null/d' guid.cc
-        echo "Patched guid.cc and guid.h to remove uuid dependency"
+        sed -i '/uuid_generate_time/d' guid.cc
+        sed -i '/uuid_generate_random/d' guid.cc
+
+        # 替换 UUID 生成逻辑为简单随机填充（避免 crash）
+        sed -i '/GenerateGUID() {/a \    srand(time(NULL));\n    for (int i = 0; i < 16; i++) uuidData[i] = rand() % 256;' guid.cc
+        sed -i '/GenerateGUID() {/a \    \/\/ Fallback random UUID without libuuid' guid.cc
+
+        echo "Patched guid.cc and guid.h to remove all uuid dependencies"
 
     - name: Cross-compile static sgdisk for Android arm64
       working-directory: gptfdisk-1.0.10
@@ -50,7 +62,7 @@ jobs:
           LD=$TOOLCHAIN/bin/ld \
           RANLIB=$TOOLCHAIN/bin/llvm-ranlib \
           STRIP=$TOOLCHAIN/bin/llvm-strip \
-          CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES" \
+          CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES -Wno-error" \
           LDFLAGS="-static" \
           sgdisk
 
@@ -66,6 +78,6 @@ jobs:
     - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-android-arm64-patched
+        name: sgdisk-static-android-arm64-fully-patched
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
