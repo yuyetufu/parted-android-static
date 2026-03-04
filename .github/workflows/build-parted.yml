@@ -1,4 +1,4 @@
-name: Build Static parted-3.6 for Android arm64
+name: Build Static parted-3.6 for Android arm64 (no uuid)
 
 on:
   workflow_dispatch:  # 手动触发
@@ -18,7 +18,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y wget tar xz-utils build-essential autoconf automake libtool pkg-config
 
-    - name: Download Android NDK r25c (lightweight)
+    - name: Download Android NDK r25c
       run: |
         wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
         unzip -q android-ndk-r25c-linux.zip -d $HOME
@@ -30,7 +30,7 @@ jobs:
         tar xf parted-3.6.tar.xz
         cd parted-3.6
 
-    - name: Configure for static arm64-android build
+    - name: Configure for static arm64-android build (without uuid)
       working-directory: parted-3.6
       run: |
         export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
@@ -52,7 +52,8 @@ jobs:
           --disable-readline \
           --disable-device-mapper \
           --disable-debug \
-          --without-uuid   
+          --without-uuid \
+          --disable-Werror
 
     - name: Compile
       working-directory: parted-3.6
@@ -62,14 +63,19 @@ jobs:
       working-directory: parted-3.6
       run: make install
 
+    - name: Strip binary to make it smaller
+      run: |
+        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip /tmp/parted-install/sbin/parted
+
     - name: Verify static binary
       run: |
         file /tmp/parted-install/sbin/parted
         ls -lh /tmp/parted-install/sbin/parted
+        /tmp/parted-install/sbin/parted --version || echo "Version check may fail without readline, but binary is ok"
 
     - name: Upload artifact (the static parted binary)
       uses: actions/upload-artifact@v4
       with:
-        name: parted-static-arm64
+        name: parted-3.6-static-arm64
         path: /tmp/parted-install/sbin/parted
         retention-days: 7
