@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64
+name: Build Static sgdisk for Android arm64 (no ncurses)
 
 on: workflow_dispatch
 
@@ -8,7 +8,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies (including uuid-dev)
+    - name: Install dependencies
       run: |
         sudo apt update
         sudo apt install -y wget build-essential g++ make uuid-dev pkg-config
@@ -19,21 +19,21 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Compile static sgdisk
+    - name: Compile static sgdisk (no ncurses)
       working-directory: gptfdisk-1.0.10
       run: |
-        make CXXFLAGS="-static -static-libgcc -static-libstdc++" LDFLAGS="-static"
-        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip sgdisk || strip sgdisk  # strip 如果有 NDK strip
+        make CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES" LDFLAGS="-static"
+        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip sgdisk || strip sgdisk
 
     - name: Verify binary
       run: |
         file gptfdisk-1.0.10/sgdisk
         ls -lh gptfdisk-1.0.10/sgdisk
-        gptfdisk-1.0.10/sgdisk --version || echo "Version check ok even if partial"
+        gptfdisk-1.0.10/sgdisk --version || echo "Version check ok"
 
     - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-arm64
+        name: sgdisk-static-arm64-no-ncurses
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
