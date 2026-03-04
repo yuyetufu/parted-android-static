@@ -25,37 +25,29 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Patch to remove popt, uuid, ncurses dependencies
+    - name: Patch sources to remove dependencies (popt, uuid, ncurses)
       working-directory: gptfdisk-1.0.10
       run: |
-        # 1. 注释 popt.h include
-        sed -i 's@#include <popt.h>@// #include <popt.h>@g' sgdisk.cc
+        # 1. 注释 popt.h include (直接 echo 覆盖 sgdisk.cc 第一行附近)
+        head -n 20 sgdisk.cc | sed 's/#include <popt.h>/\/\/ &/' > sgdisk.cc.tmp
+        tail -n +21 sgdisk.cc >> sgdisk.cc.tmp
+        mv sgdisk.cc.tmp sgdisk.cc
 
-        # 2. 删除 popt 相关代码
-        sed -i '/poptContext/d' sgdisk.cc
-        sed -i '/poptGetArg/d' sgdisk.cc
-        sed -i '/poptFreeContext/d' sgdisk.cc
-        sed -i '/poptGetNextOpt/d' sgdisk.cc
-        sed -i '/poptPrintHelp/d' sgdisk.cc
-        sed -i '/poptPrintUsage/d' sgdisk.cc
-        sed -i '/poptBadOption/d' sgdisk.cc
+        # 2. 删除 popt 相关代码（用 grep -v 逐行过滤）
+        grep -v -E 'poptContext|poptGetArg|poptFreeContext|poptGetNextOpt|poptPrintHelp|poptPrintUsage|poptBadOption' sgdisk.cc > sgdisk_tmp.cc
+        mv sgdisk_tmp.cc sgdisk.cc
 
-        # 3. 创建临时 fallback argv 解析文件
-        cat > fallback_argv.txt << 'EOF'
-        // Fallback argv parsing without popt (added by patch)
-        char *device = NULL;
-        char *command = NULL;
-        for (int i = 1; i < argc; i++) {
-          if (argv[i][0] != '-') device = argv[i];
-          else command = argv[i];
-        }
-        EOF
+        # 3. 添加 fallback argv 解析（用 cat 追加到 main 函数后）
+        echo '// Fallback argv parsing without popt (added by patch)' >> sgdisk.cc
+        echo 'char *device = NULL;' >> sgdisk.cc
+        echo 'char *command = NULL;' >> sgdisk.cc
+        echo 'for (int i = 1; i < argc; i++) {' >> sgdisk.cc
+        echo '  if (argv[i][0] != '-') device = argv[i];' >> sgdisk.cc
+        echo '  else command = argv[i];' >> sgdisk.cc
+        echo '}' >> sgdisk.cc
 
-        # 4. 插入 fallback 到 main 函数后
-        sed -i '/int main(int argc, char *argv[])/r fallback_argv.txt' sgdisk.cc
-
-        # 5. 移除 uuid 依赖
-        sed -i 's@#include <uuid/uuid.h>@// #include <uuid/uuid.h>@g' guid.cc guid.h
+        # 4. 移除 uuid 依赖
+        sed -i 's/#include <uuid\/uuid.h>/\/\/ &/g' guid.cc guid.h
         sed -i '/typedef uuid_t my_uuid_t/d' guid.h
         sed -i 's/my_uuid_t uuidData;/uint8_t uuidData[16];/g' guid.cc
         sed -i '/uuid_generate/d' guid.cc
@@ -64,18 +56,15 @@ jobs:
         sed -i '/uuid_copy/d' guid.cc
         sed -i '/uuid_is_null/d' guid.cc
 
-        # 6. 加必要头文件
-        sed -i '1i #include <stdint.h>' guid.cc
+        # 5. 加必要头文件（用 echo 插入顶部）
+        echo '#include <stdint.h>' | cat - guid.cc > guid_tmp.cc && mv guid_tmp.cc guid.cc
         sed -i '/GenerateGUID() {/i #include <stdlib.h>\n#include <time.h>' guid.cc
 
-        # 7. 替换 GenerateGUID 逻辑为随机填充
+        # 6. 替换 GenerateGUID 逻辑为随机填充
         sed -i '/GenerateGUID() {/a srand(time(NULL));\nfor (int i = 0; i < 16; i++) uuidData[i] = (uint8_t)(rand() % 256);' guid.cc
 
-        # 8. 删除旧 memcpy
+        # 7. 删除旧 memcpy
         sed -i '/memcpy(uuidData, orig.uuidData/d' guid.cc
-
-        # 9. 清理临时文件
-        rm fallback_argv.txt
 
         echo "Patched sgdisk.cc and guid.cc: removed popt, uuid, ncurses dependencies"
 
