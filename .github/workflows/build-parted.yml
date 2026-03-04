@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (only sgdisk)
+name: Build Static sgdisk for Android arm64 (cross-compile with NDK)
 
 on: workflow_dispatch
 
@@ -11,7 +11,13 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y wget build-essential g++ make uuid-dev pkg-config libpopt-dev
+        sudo apt install -y wget tar xz-utils build-essential autoconf automake libtool pkg-config uuid-dev libpopt-dev
+
+    - name: Download Android NDK r25c
+      run: |
+        wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+        unzip -q android-ndk-r25c-linux.zip -d $HOME
+        echo "ANDROID_NDK_HOME=$HOME/android-ndk-r25c" >> $GITHUB_ENV
 
     - name: Download gptfdisk 1.0.10 source
       run: |
@@ -19,21 +25,36 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Compile only static sgdisk (no cgdisk, no ncurses)
+    - name: Cross-compile static sgdisk for Android arm64
       working-directory: gptfdisk-1.0.10
       run: |
-        make CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES" LDFLAGS="-static" sgdisk
-        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip sgdisk || strip sgdisk
+        export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+        export TARGET=aarch64-linux-android
+        export API=21
+
+        make \
+          CC=$TOOLCHAIN/bin/$TARGET$API-clang \
+          CXX=$TOOLCHAIN/bin/$TARGET$API-clang++ \
+          AR=$TOOLCHAIN/bin/llvm-ar \
+          LD=$TOOLCHAIN/bin/ld \
+          RANLIB=$TOOLCHAIN/bin/llvm-ranlib \
+          STRIP=$TOOLCHAIN/bin/llvm-strip \
+          CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES" \
+          LDFLAGS="-static" \
+          sgdisk
+
+        $TOOLCHAIN/bin/llvm-strip sgdisk
 
     - name: Verify binary
       run: |
         file gptfdisk-1.0.10/sgdisk
         ls -lh gptfdisk-1.0.10/sgdisk
-        gptfdisk-1.0.10/sgdisk --version || echo "Version check ok (sgdisk only)"
+        echo "Architecture check (should be aarch64):"
+        file gptfdisk-1.0.10/sgdisk | grep aarch64 || echo "Not aarch64, check compile"
 
     - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-arm64
+        name: sgdisk-static-android-arm64
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
