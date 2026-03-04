@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (cross-compile with NDK)
+name: Build Static sgdisk for Android arm64 (patched no uuid)
 
 on: workflow_dispatch
 
@@ -11,7 +11,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install -y wget tar xz-utils build-essential autoconf automake libtool pkg-config uuid-dev libpopt-dev
+        sudo apt install -y wget tar xz-utils build-essential g++ make pkg-config
 
     - name: Download Android NDK r25c
       run: |
@@ -24,6 +24,15 @@ jobs:
         wget https://downloads.sourceforge.net/project/gptfdisk/gptfdisk/1.0.10/gptfdisk-1.0.10.tar.gz
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
+
+    - name: Patch guid.cc to remove uuid dependency
+      working-directory: gptfdisk-1.0.10
+      run: |
+        sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc
+        sed -i '/uuid_generate/d' guid.cc
+        sed -i '/uuid_unparse/d' guid.cc
+        sed -i '/uuid_clear/d' guid.cc
+        echo "Patched guid.cc to remove uuid.h dependency"
 
     - name: Cross-compile static sgdisk for Android arm64
       working-directory: gptfdisk-1.0.10
@@ -55,6 +64,6 @@ jobs:
     - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-android-arm64
+        name: sgdisk-static-android-arm64-patched
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
