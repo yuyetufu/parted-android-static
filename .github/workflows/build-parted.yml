@@ -1,81 +1,36 @@
-name: Build Static parted-3.6 for Android arm64 (no uuid)
+name: Build Static sgdisk for Android arm64
 
-on:
-  workflow_dispatch:  # 手动触发
-  push:
-    branches: [ main ]
+on: workflow_dispatch
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Install dependencies
+      run: sudo apt update && sudo apt install -y wget build-essential g++ make
+
+    - name: Download gptfdisk 1.0.10 source
       run: |
-        sudo apt-get update
-        sudo apt-get install -y wget tar xz-utils build-essential autoconf automake libtool pkg-config
+        wget https://downloads.sourceforge.net/project/gptfdisk/gptfdisk/1.0.10/gptfdisk-1.0.10.tar.gz
+        tar xf gptfdisk-1.0.10.tar.gz
+        cd gptfdisk-1.0.10
 
-    - name: Download Android NDK r25c
+    - name: Compile static sgdisk
+      working-directory: gptfdisk-1.0.10
       run: |
-        wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-        unzip -q android-ndk-r25c-linux.zip -d $HOME
-        echo "ANDROID_NDK_HOME=$HOME/android-ndk-r25c" >> $GITHUB_ENV
+        make CXXFLAGS="-static -static-libgcc -static-libstdc++" LDFLAGS="-static"
+        strip sgdisk
 
-    - name: Download parted-3.6 source
+    - name: Verify binary
       run: |
-        wget https://ftp.gnu.org/gnu/parted/parted-3.6.tar.xz
-        tar xf parted-3.6.tar.xz
-        cd parted-3.6
+        file gptfdisk-1.0.10/sgdisk
+        ls -lh gptfdisk-1.0.10/sgdisk
 
-    - name: Configure for static arm64-android build (without uuid)
-      working-directory: parted-3.6
-      run: |
-        export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
-        export TARGET=aarch64-linux-android
-        export API=21
-
-        ./configure \
-          --host=$TARGET \
-          --prefix=/tmp/parted-install \
-          CC=$TOOLCHAIN/bin/$TARGET$API-clang \
-          CXX=$TOOLCHAIN/bin/$TARGET$API-clang++ \
-          AR=$TOOLCHAIN/bin/llvm-ar \
-          LD=$TOOLCHAIN/bin/ld \
-          RANLIB=$TOOLCHAIN/bin/llvm-ranlib \
-          STRIP=$TOOLCHAIN/bin/llvm-strip \
-          --enable-static \
-          --disable-shared \
-          --disable-nls \
-          --disable-readline \
-          --disable-device-mapper \
-          --disable-debug \
-          --without-uuid \
-          --disable-Werror
-
-    - name: Compile
-      working-directory: parted-3.6
-      run: make -j$(nproc)
-
-    - name: Install to output dir
-      working-directory: parted-3.6
-      run: make install
-
-    - name: Strip binary to make it smaller
-      run: |
-        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip /tmp/parted-install/sbin/parted
-
-    - name: Verify static binary
-      run: |
-        file /tmp/parted-install/sbin/parted
-        ls -lh /tmp/parted-install/sbin/parted
-        /tmp/parted-install/sbin/parted --version || echo "Version check may fail without readline, but binary is ok"
-
-    - name: Upload artifact (the static parted binary)
+    - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
       with:
-        name: parted-3.6-static-arm64
-        path: /tmp/parted-install/sbin/parted
+        name: sgdisk-static-arm64
+        path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
