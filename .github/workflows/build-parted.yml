@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (ultimate patch no uuid)
+name: Build Static sgdisk for Android arm64 (ultimate patch v2)
 
 on: workflow_dispatch
 
@@ -25,17 +25,17 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Ultimate patch to remove uuid completely
+    - name: Ultimate patch v2 to remove uuid completely
       working-directory: gptfdisk-1.0.10
       run: |
         # 1. 注释所有 uuid include
         sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc guid.h
 
-        # 2. 删除 typedef my_uuid_t
+        # 2. 删除 typedef uuid_t my_uuid_t
         sed -i '/typedef uuid_t my_uuid_t/d' guid.h
 
-        # 3. 把 my_uuid_t uuidData; 改成 uint8_t uuidData[16];
-        sed -i 's/my_uuid_t uuidData;/uint8_t uuidData[16];/g' guid.cc
+        # 3. 把 guid.h 中的 my_uuid_t uuidData; 改成 uint8_t uuidData[16];
+        sed -i 's/my_uuid_t uuidData;/uint8_t uuidData[16];/g' guid.h
 
         # 4. 删除所有 uuid_ 函数调用
         sed -i '/uuid_generate/d' guid.cc
@@ -44,15 +44,18 @@ jobs:
         sed -i '/uuid_copy/d' guid.cc
         sed -i '/uuid_is_null/d' guid.cc
 
-        # 5. 替换 GenerateGUID() 为随机填充（添加 srand 和 rand）
+        # 5. 强制在 guid.cc 顶部加 uint8_t 定义（如果 guid.h 没改成功）
+        sed -i '1i #include <stdint.h>' guid.cc
+
+        # 6. 替换 GenerateGUID() 为随机填充
         sed -i '/GenerateGUID() {/i #include <stdlib.h>\n#include <time.h>' guid.cc
-        sed -i '/GenerateGUID() {/a \    srand(time(NULL));\n    for (int i = 0; i < 16; i++) uuidData[i] = rand() % 256;' guid.cc
+        sed -i '/GenerateGUID() {/a \    srand(time(NULL));\n    for (int i = 0; i < 16; i++) uuidData[i] = (uint8_t)(rand() % 256);' guid.cc
 
-        # 6. 删除旧 memcpy(uuidData, ...) 调用
-        sed -i '/memcpy(uuidData, orig.uuidData, sizeof(uuidData));/d' guid.cc
+        # 7. 删除旧 memcpy 和其他 uuidData 使用（如果有残留）
+        sed -i '/memcpy(uuidData, orig.uuidData/d' guid.cc
+        sed -i '/uuidData\[.*\]/s/my_uuidData/uuidData/g' guid.cc   # 清理残留
 
-        # 7. 确保 uuidData[xx] 访问正常（已改成数组）
-        echo "Ultimate patch applied: uuid removed, uuidData as uint8_t[16], random filled"
+        echo "Ultimate v2 patch applied: uuid removed, uuidData forced to uint8_t[16]"
 
     - name: Cross-compile static sgdisk
       working-directory: gptfdisk-1.0.10
@@ -68,7 +71,7 @@ jobs:
           LD=$TOOLCHAIN/bin/ld \
           RANLIB=$TOOLCHAIN/bin/llvm-ranlib \
           STRIP=$TOOLCHAIN/bin/llvm-strip \
-          CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES -Wno-error" \
+          CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES -Wno-error -Wno-unused-command-line-argument" \
           LDFLAGS="-static" \
           sgdisk
 
@@ -82,6 +85,6 @@ jobs:
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-android-arm64
+        name: sgdisk-static-android-arm64-v2
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
