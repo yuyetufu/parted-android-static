@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (no ncurses)
+name: Build Static sgdisk for Android arm64 (only sgdisk, no ncurses)
 
 on: workflow_dispatch
 
@@ -19,21 +19,21 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Compile static sgdisk (no ncurses)
+    - name: Compile only static sgdisk (no cgdisk, no ncurses)
       working-directory: gptfdisk-1.0.10
       run: |
-        make CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES" LDFLAGS="-static"
+        make CXXFLAGS="-static -static-libgcc -static-libstdc++ -DNO_NCURSES" LDFLAGS="-static" sgdisk
         $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip sgdisk || strip sgdisk
 
     - name: Verify binary
       run: |
         file gptfdisk-1.0.10/sgdisk
         ls -lh gptfdisk-1.0.10/sgdisk
-        gptfdisk-1.0.10/sgdisk --version || echo "Version check ok"
+        gptfdisk-1.0.10/sgdisk --version || echo "Version check ok (sgdisk only)"
 
     - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-arm64-no-ncurses
+        name: sgdisk-static-arm64
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
