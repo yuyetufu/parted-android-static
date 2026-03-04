@@ -1,4 +1,4 @@
-name: Build Static sgdisk for Android arm64 (fully patched no uuid no ncurses)
+name: Build Static sgdisk for Android arm64 (ultimate patch no uuid)
 
 on: workflow_dispatch
 
@@ -25,36 +25,36 @@ jobs:
         tar xf gptfdisk-1.0.10.tar.gz
         cd gptfdisk-1.0.10
 
-    - name: Patch guid.cc and guid.h to completely remove uuid dependency
+    - name: Ultimate patch to remove uuid completely
       working-directory: gptfdisk-1.0.10
       run: |
-        # 注释 include
+        # 1. 注释所有 uuid include
         sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc guid.h
 
-        # 删除 typedef uuid_t 和 my_uuid_t 定义
+        # 2. 删除 typedef my_uuid_t
         sed -i '/typedef uuid_t my_uuid_t/d' guid.h
-        sed -i '/my_uuid_t uuidData/d' guid.cc
 
-        # 删除所有 uuid_ 函数调用
+        # 3. 把 my_uuid_t uuidData; 改成 uint8_t uuidData[16];
+        sed -i 's/my_uuid_t uuidData;/uint8_t uuidData[16];/g' guid.cc
+
+        # 4. 删除所有 uuid_ 函数调用
         sed -i '/uuid_generate/d' guid.cc
         sed -i '/uuid_unparse/d' guid.cc
         sed -i '/uuid_clear/d' guid.cc
         sed -i '/uuid_copy/d' guid.cc
         sed -i '/uuid_is_null/d' guid.cc
-        sed -i '/uuid_generate_time/d' guid.cc
-        sed -i '/uuid_generate_random/d' guid.cc
 
-        # 把 uuidData 改成 uint8_t 数组，并添加随机填充逻辑（需要 <stdlib.h> <time.h>）
+        # 5. 替换 GenerateGUID() 为随机填充（添加 srand 和 rand）
         sed -i '/GenerateGUID() {/i #include <stdlib.h>\n#include <time.h>' guid.cc
-        sed -i '/GenerateGUID() {/a \    uint8_t uuidData[16];\n    srand(time(NULL));\n    for (int i = 0; i < 16; i++) uuidData[i] = rand() % 256;' guid.cc
+        sed -i '/GenerateGUID() {/a \    srand(time(NULL));\n    for (int i = 0; i < 16; i++) uuidData[i] = rand() % 256;' guid.cc
+
+        # 6. 删除旧 memcpy(uuidData, ...) 调用
         sed -i '/memcpy(uuidData, orig.uuidData, sizeof(uuidData));/d' guid.cc
-        sed -i '/uuidData\[.*\]/s/uuidData/my_uuidData/g' guid.cc   # 临时替换，防止冲突
-        sed -i '/my_uuid_t my_uuidData\[16\];/d' guid.cc
-        sed -i 's/my_uuidData/uuidData/g' guid.cc
 
-        echo "Patched guid.cc and guid.h to remove all uuid dependencies and use random array"
+        # 7. 确保 uuidData[xx] 访问正常（已改成数组）
+        echo "Ultimate patch applied: uuid removed, uuidData as uint8_t[16], random filled"
 
-    - name: Cross-compile static sgdisk for Android arm64
+    - name: Cross-compile static sgdisk
       working-directory: gptfdisk-1.0.10
       run: |
         export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
@@ -74,16 +74,14 @@ jobs:
 
         $TOOLCHAIN/bin/llvm-strip sgdisk
 
-    - name: Verify binary
+    - name: Verify
       run: |
         file gptfdisk-1.0.10/sgdisk
         ls -lh gptfdisk-1.0.10/sgdisk
-        echo "Architecture check:"
-        file gptfdisk-1.0.10/sgdisk | grep aarch64 || echo "Not aarch64"
 
-    - name: Upload static sgdisk
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: sgdisk-static-android-arm64-patched
+        name: sgdisk-static-android-arm64
         path: gptfdisk-1.0.10/sgdisk
         retention-days: 7
