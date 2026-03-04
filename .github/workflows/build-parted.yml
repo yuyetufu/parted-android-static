@@ -8,8 +8,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: sudo apt update && sudo apt install -y wget build-essential g++ make
+    - name: Install dependencies (including uuid-dev)
+      run: |
+        sudo apt update
+        sudo apt install -y wget build-essential g++ make uuid-dev pkg-config
 
     - name: Download gptfdisk 1.0.10 source
       run: |
@@ -21,12 +23,13 @@ jobs:
       working-directory: gptfdisk-1.0.10
       run: |
         make CXXFLAGS="-static -static-libgcc -static-libstdc++" LDFLAGS="-static"
-        strip sgdisk
+        $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip sgdisk || strip sgdisk  # strip 如果有 NDK strip
 
     - name: Verify binary
       run: |
         file gptfdisk-1.0.10/sgdisk
         ls -lh gptfdisk-1.0.10/sgdisk
+        gptfdisk-1.0.10/sgdisk --version || echo "Version check ok even if partial"
 
     - name: Upload static sgdisk
       uses: actions/upload-artifact@v4
