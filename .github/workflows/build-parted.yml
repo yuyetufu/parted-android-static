@@ -28,8 +28,10 @@ jobs:
     - name: Patch to remove popt, uuid, ncurses dependencies
       working-directory: gptfdisk-1.0.10
       run: |
-        # 移除 popt.h include 和 popt 相关代码
-        sed -i 's/#include <popt.h>/\/\/ #include <popt.h>/g' sgdisk.cc
+        # 注释 popt.h include
+        sed -i 's@#include <popt.h>@// #include <popt.h>@g' sgdisk.cc
+
+        # 删除 popt 相关代码（逐行删，避免复杂正则）
         sed -i '/poptContext/d' sgdisk.cc
         sed -i '/poptGetArg/d' sgdisk.cc
         sed -i '/poptFreeContext/d' sgdisk.cc
@@ -38,11 +40,18 @@ jobs:
         sed -i '/poptPrintUsage/d' sgdisk.cc
         sed -i '/poptBadOption/d' sgdisk.cc
 
-        # 用简单 argv 解析替代 popt（添加 fallback 代码）
-        sed -i '/int main(int argc, char *argv[])/a \    \/\/ Fallback argv parsing without popt\n    char *device = NULL;\n    char *command = NULL;\n    for (int i = 1; i < argc; i++) {\n        if (argv[i][0] != '-') device = argv[i];\n        else command = argv[i];\n    }' sgdisk.cc
+        # 添加 fallback argv 解析（多行插入用 \n）
+        sed -i '/int main(int argc, char *argv[])/a \
+        \/\/ Fallback argv parsing without popt\n\
+        char *device = NULL;\n\
+        char *command = NULL;\n\
+        for (int i = 1; i < argc; i++) {\n\
+          if (argv[i][0] != '-') device = argv[i];\n\
+          else command = argv[i];\n\
+        }' sgdisk.cc
 
-        # 移除 uuid 依赖（已测试）
-        sed -i 's/#include <uuid\/uuid.h>/\/\/ #include <uuid\/uuid.h>/g' guid.cc guid.h
+        # 移除 uuid 依赖
+        sed -i 's@#include <uuid/uuid.h>@// #include <uuid/uuid.h>@g' guid.cc guid.h
         sed -i '/typedef uuid_t my_uuid_t/d' guid.h
         sed -i 's/my_uuid_t uuidData;/uint8_t uuidData[16];/g' guid.cc
         sed -i '/uuid_generate/d' guid.cc
@@ -50,13 +59,20 @@ jobs:
         sed -i '/uuid_clear/d' guid.cc
         sed -i '/uuid_copy/d' guid.cc
         sed -i '/uuid_is_null/d' guid.cc
+
+        # 加必要头文件
         sed -i '1i #include <stdint.h>' guid.cc
         sed -i '/GenerateGUID() {/i #include <stdlib.h>\n#include <time.h>' guid.cc
-        sed -i '/GenerateGUID() {/a \    srand(time(NULL));\n    for (int i = 0; i < 16; i++) uuidData[i] = (uint8_t)(rand() % 256);' guid.cc
-        sed -i '/memcpy(uuidData, orig.uuidData, sizeof(uuidData));/d' guid.cc
 
-        # 确保 NO_NCURSES
-        echo "Patched sgdisk.cc: removed popt, uuid, ncurses dependencies"
+        # 替换 GenerateGUID 逻辑为随机填充
+        sed -i '/GenerateGUID() {/a \
+        srand(time(NULL));\n\
+        for (int i = 0; i < 16; i++) uuidData[i] = (uint8_t)(rand() % 256);' guid.cc
+
+        # 删除旧 memcpy
+        sed -i '/memcpy(uuidData, orig.uuidData/d' guid.cc
+
+        echo "Patched sgdisk.cc and guid.cc: removed popt, uuid, ncurses dependencies"
 
     - name: Cross-compile static sgdisk
       working-directory: gptfdisk-1.0.10
